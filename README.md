@@ -1,1 +1,2 @@
-# COLS
+# COLS Galaxy Experiment
+Code for experiments regarding CVPR paper called "Classification using Ordinary Least Squares Improves Overall Accuracy and Interpretability for Small Data Problems" for galaxy experiment (Ganalyzer: A Tool for Automatic Galaxy Image Analysis, Shamir, 2011). The original image data is not provided here, but can be obtained from Shamir, 2011. The EIs resulting from the image operators are from Lamberti, Kinser, and Eagle (2019).  Please cite Lamberti, Kinser, and Eagle (2019) as some of the results come directly from that paper.
