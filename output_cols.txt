@@ -1,0 +1,3091 @@
+
+R version 3.4.4 (2018-03-15) -- "Someone to Lean On"
+Copyright (C) 2018 The R Foundation for Statistical Computing
+Platform: x86_64-apple-darwin15.6.0 (64-bit)
+
+R is free software and comes with ABSOLUTELY NO WARRANTY.
+You are welcome to redistribute it under certain conditions.
+Type 'license()' or 'licence()' for distribution details.
+
+  Natural language support but running in an English locale
+
+R is a collaborative project with many contributors.
+Type 'contributors()' for more information and
+'citation()' on how to cite R or R packages in publications.
+
+Type 'demo()' for some demos, 'help()' for on-line help, or
+'help.start()' for an HTML browser interface to help.
+Type 'q()' to quit R.
+
+[Previously saved workspace restored]
+
+> library(xtable) #for table creation for latex
+> library(ggplot2)#for graphics
+> library(MASS)#for qda
+> library(scales)#for scientific notation
+> library(RColorBrewer) #for base r plot
+> library(class) #for base r plot
+> library(plyr)#for obtaining means by factor
+> library(e1071)#for svm
+> library(tree)#for tree based methods
+> library(nnet)#for multinomial regression
+> #importing custom functions to calculate classes via COLS
+> source('cols.r')
+> 
+> #defining proper scientific notation
+> 
+> scientific_10 <- function(x) {
++   parse(text=gsub("e", " %*% 10^", scales::scientific_format()(x)))
++ }
+> 
+> #custom theme
+> mytheme.scat<-theme(
++ 
++ 	plot.title = element_text(size=60, face="bold", hjust = 0.5),
++ 	axis.text.x  = element_text(size=20, face="bold"),
++ 	axis.text.y=element_text(size=20, face="bold"),
++ 	axis.title.x=element_text(size=28, face='bold'),
++ 	axis.title.y=element_text(size=28, face='bold'),
++ 	strip.background=element_rect(fill="gray80"),
++ 	panel.background=element_rect(fill="gray80"),
++ 	axis.ticks= element_blank(),
++ 	axis.text=element_text(colour="black"),
++   strip.text = element_text(size=25)
++ 
++ 	)
+> 
+> #getting theoretical values
+> n <-c(3:8)
+> 
+> #matrix to hold results
+> model_rslts<-matrix(nrow=5, ncol=2, data=0)
+> colnames(model_rslts)<-c("Train", "Validation")
+> rownames(model_rslts)<-c("SVM", "Tree", "LDA", "LR", "COLS")
+> 
+> #setup for validation plot
+> 
+> valid_results<-matrix(nrow=5, ncol=4, data=0)
+> colnames(valid_results)<-c("n=3", "n=4", "n=5", "n=6")
+> rownames(valid_results)<-c("SVM", "Tree", "LDA", "LR", "COLS")
+> 
+> #setup for training plot
+> train_results<-matrix(nrow=5, ncol=4, data=0)
+> colnames(train_results)<-c("n=3", "n=4", "n=5", "n=6")
+> rownames(train_results)<-c("SVM", "Tree", "LDA", "LR", "COLS")
+> 
+> m = 1000
+> 
+> #creating data
+> set.seed(829)
+> 
+> #creating data
+> cov_mat<-matrix(nrow=3, data=c(1, .90, 1,
++ 															 .90, 1, .90,
++ 															 1, .90, 1))
+> means<-c(1, 25, 1)
+> 
+> #first class
+> data1<-mvrnorm(n=m, mu=means, Sigma=cov_mat)
+> 
+> #second class
+> cov_mat<-matrix(nrow=3, data=c(1, 1.0, 1.0,
++ 															 1.0, 1, 1.0,
++ 															 1.0, 1.0, 1))
+> means<-c(0.25, 10, 4)
+> 
+> data2<-mvrnorm(n=m, mu=means, Sigma=cov_mat)
+> #data2<-data1+10
+> 
+> data<-rbind(data1, data2)
+> 
+> df<-as.data.frame(data)
+> 
+> #cleaning data for ggplot2 and analysis
+> labs<-as.factor(c(rep(1, m), rep(2, m) ) )
+> 
+> #counts plot
+> labs2<-as.factor(labs)
+> 
+> ##################################
+> ## training sample size = 3
+> ##################################
+> 
+> n=3
+> 
+> #################
+> # modeling
+> #################
+> 
+> set.seed(5076719)
+> 
+> 
+> #initialize objects to hold results
+> qda_train<-c()
+> qda_valid<-c()
+> svm_train<-c()
+> svm_valid<-c()
+> tree_train<-c()
+> tree_valid<-c()
+> lda_train<-c()
+> lda_valid<-c()
+> lr_train<-c()
+> lr_valid<-c()
+> cols_train<-c()
+> cols_valid<-c()
+> 
+> #simuiltion size
+> sim=100
+> 
+> for (i in 1:sim) {
++ 
++     train1<-sample(1:m, n)
++     train2<-sample(1:m, n)
++ 
++     mytrain<-rbind(data1[train1,], data2[train2,])
++ 
++     labs_train<-as.factor(c(rep(1, n), rep(2, n)) )
++ 
++     myvalid<-rbind(data1[-train1,], data2[-train2,])
++ 
++     labs_valid<-as.factor(c(rep(1, m-n),
++                             rep(2, m-n) ) )
++ 
++     #######
++     #QDA
++     #######
++ 
++     #creating model
++     #qda.fit = qda(equa, data=train)
++     #qda.fit #rank deficiency - ie unable to compute
++ 
++     #predicting
++     #qda.pred=predict(qda.fit, train)
++     #qda.class = qda.pred$class
++ 
++     #results
++     #table(qda.class, labs_train)
++     #overall classification rate for training
++     #qda_train[i]<- mean(qda.class==as.factor(as.numeric(labs_train)))
++ 
++     #######
++     #SVM
++     #######
++ 
++     equa=labs ~ V1 + V2 + V3
++ 
++     train<-as.data.frame(cbind(as.factor(labs_train), mytrain))
++     colnames(train)<-c("labs", "V1", "V2", "V3")
++ 
++     valid<-as.data.frame(cbind(as.factor(labs_valid), myvalid))
++     colnames(valid)<-c("labs", "V1", "V2", "V3")
++ 
++     #creating model
++     svmfit=svm(labs ~ V1 + V2 + V3, data=as.data.frame(train),
++            kernel="linear",
++            #cost=2, #coef0= 1, degree=2,
++            scale=FALSE)
++ 
++     #plot(svmfit , train)
++     #summary(svmfit)
++ 
++     ypred=round(predict(svmfit ,as.data.frame(train)))
++     #table(predict=ypred, truth=train$labs)
++     svm_train[i]<-mean(ypred==as.factor(as.numeric(labs_train)))
++ 
++     #now on valid
++     ypred_valid=round(predict(svmfit ,as.data.frame(valid) ))
++     #table(predict=ypred_valid, truth=valid$labs)
++     svm_valid[i]<-mean(ypred_valid==as.factor(as.numeric(labs_valid)))
++ 
++ 
++     ######
++     # Tree
++     #######
++ 
++     #training tree mdoel
++     treefit =tree(labs_train~ V1+V2+V3, data=as.data.frame(train) )
++     #summary(treefit)
++ 
++     ypred_train=predict(treefit ,train, type='class')
++     #table(predict=ypred_train, truth=as.factor(train$labs))
++     tree_train<-mean(ypred_train==as.factor((train$labs)))
++ 
++     #plot(treefit )
++     #text(treefit ,pretty =0)
++ 
++     ypred_valid=predict(treefit ,valid, type='class')
++     #table(predict=ypred_valid, truth=valid$labs)
++     tree_valid[i]<-mean(ypred_valid==as.factor(as.numeric(labs_valid)))
++ 
++     #######
++     #LDA
++     #######
++ 
++     #creating model
++     lda.fit = lda(equa, data=train)
++     #qda.fit #rank deficiency - ie unable to compute
++ 
++     #predicting
++     lda.pred=predict(lda.fit, train)
++     lda.class = lda.pred$class
++ 
++     #results
++     #table(qda.class, labs_train)
++     #overall classification rate for training
++     lda_train[i]<- mean(lda.class==as.factor(as.numeric(labs_train)))
++ 
++     ####
++     #now predict on validation
++ 
++     #predicting
++     lda.pred=predict(lda.fit, valid)
++     lda.class = lda.pred$class
++ 
++     #results
++     #table(qda.class, labs_valid)
++     #overall classification rate for training
++     lda_valid[i]<-mean(lda.class==as.factor(as.numeric(labs_valid)))
++ 
++     ################################
++     #Multinomial Logistic Regression
++     ################################
++ 
++     #creating model
++     lr.fit=multinom(equa, data=train)
++ 
++     ypred=predict(lr.fit ,train)
++     #table(predict=ypred, truth=train$labs)
++     lr_train[i]<-mean(ypred==as.factor(as.numeric(labs_train)))
++ 
++     #now on valid
++     ypred_valid=predict(lr.fit ,valid)
++     #table(predict=ypred_valid, truth=valid$labs)
++     lr_valid[i]<-mean(ypred_valid==as.factor(as.numeric(labs_valid)))
++ 
++     ####################
++     #COLS
++     ####################
++     fit<-list()
++   	equa= V1 ~ V2+ V3
++     fit[[1]]<-lm(equa,
++   	         data=as.data.frame(data1[train1,]) )
++   	fit[[2]]<-lm(equa,
++   	         data=as.data.frame(data2[train2,]) )
++ 
++   	k<-length(fit)
++   	residuals<-matrix(nrow=dim(mytrain)[1], ncol=2, data=NA)
++ 
++ 		for(j in 1:k){
++ 
++ 		    residuals[,j]<-predict(fit[[j]],
++ 															 newdata=as.data.frame(mytrain) )
++ 
++   		}
++ 
++   	cols_class<-apply(FUN=which.min, X=residuals^2, MARGIN=1)
++ 
++ 		cols_train[i]<-mean(cols_class==as.factor(as.numeric(labs_train)))
++ 
++ 		#predicting classes for validation
++ 		residuals<-matrix(nrow=dim(myvalid)[1], ncol=2, data=NA)
++ 
++ 		for(j in 1:k){
++ 
++ 		    residuals[,j]<-predict(fit[[j]],
++ 															 newdata=as.data.frame(myvalid) )
++ 
++ 		}
++ 
++ 		cols_class<-apply(FUN=which.min, X=residuals^2, MARGIN=1)
++ 
++ 		cols_valid[i]<-mean(cols_class==as.factor(as.numeric(labs_valid)))
++ 
++ }
+# weights:  5 (4 variable)
+initial  value 4.158883 
+final  value 0.000079 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+final  value 0.000077 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+iter  10 value 0.001025
+final  value 0.000056 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+final  value 0.000085 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+final  value 0.000043 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+iter  10 value 0.002007
+final  value 0.000061 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+final  value 0.000078 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+final  value 0.000080 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+iter  10 value 0.000124
+final  value 0.000041 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+iter  10 value 0.001510
+final  value 0.000076 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+final  value 0.000060 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+final  value 0.000079 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+final  value 0.000060 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+final  value 0.000068 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+final  value 0.000056 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+iter  10 value 0.000384
+final  value 0.000060 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+iter  10 value 0.000144
+final  value 0.000047 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+iter  10 value 0.000627
+final  value 0.000085 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+final  value 0.000079 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+iter  10 value 0.000220
+final  value 0.000066 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+final  value 0.000069 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+iter  10 value 0.002268
+final  value 0.000068 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+final  value 0.000050 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+final  value 0.000056 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+final  value 0.000055 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+final  value 0.000063 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+iter  10 value 0.005356
+iter  20 value 0.000220
+iter  30 value 0.000131
+final  value 0.000057 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+iter  10 value 0.000381
+final  value 0.000059 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+iter  10 value 0.000243
+final  value 0.000072 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+final  value 0.000006 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+iter  10 value 0.001194
+final  value 0.000067 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+final  value 0.000064 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+final  value 0.000047 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+final  value 0.000070 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+final  value 0.000085 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+iter  10 value 0.000163
+final  value 0.000050 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+final  value 0.000068 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+final  value 0.000071 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+iter  10 value 0.001203
+final  value 0.000062 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+iter  10 value 0.000306
+final  value 0.000051 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+iter  10 value 0.000203
+final  value 0.000062 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+iter  10 value 0.000232
+final  value 0.000067 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+final  value 0.000082 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+iter  10 value 0.000161
+final  value 0.000051 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+iter  10 value 0.000111
+final  value 0.000036 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+iter  10 value 0.000106
+iter  10 value 0.000099
+final  value 0.000099 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+final  value 0.000053 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+iter  10 value 0.000220
+final  value 0.000067 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+iter  10 value 0.000174
+final  value 0.000054 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+iter  10 value 0.001139
+final  value 0.000056 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+iter  10 value 0.001887
+final  value 0.000065 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+final  value 0.000052 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+iter  10 value 0.000855
+final  value 0.000047 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+iter  10 value 0.000113
+final  value 0.000039 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+iter  10 value 0.000343
+final  value 0.000054 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+final  value 0.000068 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+final  value 0.000068 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+iter  10 value 0.001946
+final  value 0.000073 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+final  value 0.000068 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+final  value 0.000000 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+final  value 0.000056 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+iter  10 value 0.000922
+final  value 0.000053 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+iter  10 value 0.000181
+final  value 0.000056 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+iter  10 value 0.000199
+final  value 0.000061 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+iter  10 value 0.000226
+final  value 0.000070 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+iter  10 value 0.001980
+final  value 0.000066 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+iter  10 value 0.001414
+final  value 0.000069 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+final  value 0.000080 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+final  value 0.000080 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+final  value 0.000055 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+final  value 0.000057 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+final  value 0.000047 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+final  value 0.000056 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+final  value 0.000074 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+final  value 0.000068 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+iter  10 value 0.000341
+final  value 0.000056 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+final  value 0.000059 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+iter  10 value 0.000114
+final  value 0.000038 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+final  value 0.000058 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+iter  10 value 0.000228
+final  value 0.000069 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+iter  10 value 0.000124
+final  value 0.000040 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+iter  10 value 0.000673
+final  value 0.000087 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+final  value 0.000071 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+iter  10 value 0.000997
+final  value 0.000059 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+final  value 0.000079 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+iter  10 value 0.001256
+final  value 0.000057 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+iter  10 value 0.000361
+final  value 0.000060 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+final  value 0.000001 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+final  value 0.000060 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+iter  10 value 0.002032
+final  value 0.000063 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+final  value 0.000006 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+final  value 0.000050 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+final  value 0.000075 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+iter  10 value 0.006295
+iter  20 value 0.000273
+iter  30 value 0.000158
+final  value 0.000091 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+final  value 0.000051 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+iter  10 value 0.001387
+final  value 0.000067 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+iter  10 value 0.000164
+final  value 0.000052 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+final  value 0.000052 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+final  value 0.000060 
+converged
+# weights:  5 (4 variable)
+initial  value 4.158883 
+iter  10 value 0.002211
+final  value 0.000066 
+converged
+There were 50 or more warnings (use warnings() to see the first 50)
+> 
+> 
+> #################
+> ## Model Results
+> #################
+> 
+> #SVM
+> model_rslts[1,1]<-mean(svm_train)
+> model_rslts[1,2]<-mean(svm_valid)
+> 
+> #tree
+> model_rslts[2,1]<-mean(tree_train)
+> model_rslts[2,2]<-mean(tree_valid)
+> 
+> #LDA
+> model_rslts[3,1]<-mean(lda_train)
+> model_rslts[3,2]<-mean(lda_valid)
+> 
+> #LR
+> model_rslts[4,1]<-mean(lr_train)
+> model_rslts[4,2]<-mean(lr_valid)
+> 
+> #COL
+> model_rslts[5,1]<-mean(cols_train)
+> model_rslts[5,2]<-mean(cols_valid)
+> 
+> sd(svm_train)
+[1] 0
+> sd(svm_valid)
+[1] 0
+> sd(tree_train)
+[1] NA
+> sd(tree_valid)
+[1] 0.01134307
+> sd(lda_train)
+[1] 0
+> sd(lda_valid)
+[1] 0
+> sd(lr_valid)
+[1] 0.02172692
+> sd(lr_train)
+[1] 0
+> sd(cols_train)
+[1] 0.04273873
+> sd(cols_valid)
+[1] 0.000128602
+> 
+> 
+> #display results
+> model_rslts
+         Train Validation
+SVM  1.0000000  1.0000000
+Tree 0.3333333  0.4994534
+LDA  1.0000000  1.0000000
+LR   1.0000000  0.9873069
+COLS 0.9883333  0.9925125
+> 
+> xtable(model_rslts, digits=2)
+% latex table generated in R 3.4.4 by xtable 1.8-2 package
+% Mon Jun 24 13:40:46 2019
+\begin{table}[ht]
+\centering
+\begin{tabular}{rrr}
+  \hline
+ & Train & Validation \\ 
+  \hline
+SVM & 1.00 & 1.00 \\ 
+  Tree & 0.33 & 0.50 \\ 
+  LDA & 1.00 & 1.00 \\ 
+  LR & 1.00 & 0.99 \\ 
+  COLS & 0.99 & 0.99 \\ 
+   \hline
+\end{tabular}
+\end{table}
+> 
+> valid_results[,1]<-model_rslts[,2]
+> train_results[,1]<-model_rslts[,1]
+> 
+> ##################################
+> ## training sample size = 4
+> ##################################
+> 
+> n=4
+> 
+> #################
+> # modeling
+> #################
+> 
+> set.seed(9041520)
+> 
+> 
+> #initialize objects to hold results
+> qda_train<-c()
+> qda_valid<-c()
+> svm_train<-c()
+> svm_valid<-c()
+> tree_train<-c()
+> tree_valid<-c()
+> lda_train<-c()
+> lda_valid<-c()
+> lr_train<-c()
+> lr_valid<-c()
+> cols_train<-c()
+> cols_valid<-c()
+> 
+> #simuiltion size
+> sim=100
+> 
+> for (i in 1:sim) {
++ 
++     train1<-sample(1:m, n)
++     train2<-sample(1:m, n)
++ 
++     mytrain<-rbind(data1[train1,], data2[train2,])
++ 
++     labs_train<-as.factor(c(rep(1, n), rep(2, n)) )
++ 
++     myvalid<-rbind(data1[-train1,], data2[-train2,])
++ 
++     labs_valid<-as.factor(c(rep(1, m-n),
++                             rep(2, m-n) ) )
++ 
++     #######
++     #SVM
++     #######
++ 
++     equa=labs ~ V1 + V2 + V3
++ 
++     train<-as.data.frame(cbind(as.factor(labs_train), mytrain))
++     colnames(train)<-c("labs", "V1", "V2", "V3")
++ 
++     valid<-as.data.frame(cbind(as.factor(labs_valid), myvalid))
++     colnames(valid)<-c("labs", "V1", "V2", "V3")
++ 
++     #creating model
++     svmfit=svm(labs ~ V1 + V2 + V3, data=as.data.frame(train),
++            kernel="linear",
++            #cost=2, #coef0= 1, degree=2,
++            scale=FALSE)
++ 
++     #plot(svmfit , train)
++     #summary(svmfit)
++ 
++     ypred=round(predict(svmfit ,as.data.frame(train)))
++     #table(predict=ypred, truth=train$labs)
++     svm_train[i]<-mean(ypred==as.factor(as.numeric(labs_train)))
++ 
++     #now on valid
++     ypred_valid=round(predict(svmfit ,as.data.frame(valid) ))
++     #table(predict=ypred_valid, truth=valid$labs)
++     svm_valid[i]<-mean(ypred_valid==as.factor(as.numeric(labs_valid)))
++ 
++ 
++     ######
++     # Tree
++     #######
++ 
++     #training tree mdoel
++     treefit =tree(labs_train~ V1+V2+V3, data=as.data.frame(train) )
++     #summary(treefit)
++ 
++     ypred_train=predict(treefit ,train, type='class')
++     #table(predict=ypred_train, truth=as.factor(train$labs))
++     tree_train<-mean(ypred_train==as.factor((train$labs)))
++ 
++     #plot(treefit )
++     #text(treefit ,pretty =0)
++ 
++     ypred_valid=predict(treefit ,valid, type='class')
++     #table(predict=ypred_valid, truth=valid$labs)
++     tree_valid[i]<-mean(ypred_valid==as.factor(as.numeric(labs_valid)))
++ 
++     #######
++     #LDA
++     #######
++ 
++     #creating model
++     lda.fit = lda(equa, data=train)
++     #qda.fit #rank deficiency - ie unable to compute
++ 
++     #predicting
++     lda.pred=predict(lda.fit, train)
++     lda.class = lda.pred$class
++ 
++     #results
++     #table(qda.class, labs_train)
++     #overall classification rate for training
++     lda_train[i]<- mean(lda.class==as.factor(as.numeric(labs_train)))
++ 
++     ####
++     #now predict on validation
++ 
++     #predicting
++     lda.pred=predict(lda.fit, valid)
++     lda.class = lda.pred$class
++ 
++     #results
++     #table(qda.class, labs_valid)
++     #overall classification rate for training
++     lda_valid[i]<-mean(lda.class==as.factor(as.numeric(labs_valid)))
++ 
++     ################################
++     #Multinomial Logistic Regression
++     ################################
++ 
++     #creating model
++     lr.fit=multinom(equa, data=train)
++ 
++     ypred=predict(lr.fit ,train)
++     #table(predict=ypred, truth=train$labs)
++     lr_train[i]<-mean(ypred==as.factor(as.numeric(labs_train)))
++ 
++     #now on valid
++     ypred_valid=predict(lr.fit ,valid)
++     #table(predict=ypred_valid, truth=valid$labs)
++     lr_valid[i]<-mean(ypred_valid==as.factor(as.numeric(labs_valid)))
++ 
++     ####################
++     #COLS
++     ####################
++     fit<-list()
++   	equa= V1 ~ V2+ V3
++     fit[[1]]<-lm(equa,
++   	         data=as.data.frame(data1[train1,]) )
++   	fit[[2]]<-lm(equa,
++   	         data=as.data.frame(data2[train2,]) )
++ 
++   	k<-length(fit)
++   	residuals<-matrix(nrow=dim(mytrain)[1], ncol=2, data=NA)
++ 
++ 		for(j in 1:k){
++ 
++ 		    residuals[,j]<-predict(fit[[j]],
++ 															 newdata=as.data.frame(mytrain) )
++ 
++   		}
++ 
++   	cols_class<-apply(FUN=which.min, X=residuals^2, MARGIN=1)
++ 
++ 		cols_train[i]<-mean(cols_class==as.factor(as.numeric(labs_train)))
++ 
++ 		#predicting classes for validation
++ 		residuals<-matrix(nrow=dim(myvalid)[1], ncol=2, data=NA)
++ 
++ 		for(j in 1:k){
++ 
++ 		    residuals[,j]<-predict(fit[[j]],
++ 															 newdata=as.data.frame(myvalid) )
++ 
++ 		}
++ 
++ 		cols_class<-apply(FUN=which.min, X=residuals^2, MARGIN=1)
++ 
++ 		cols_valid[i]<-mean(cols_class==as.factor(as.numeric(labs_valid)))
++ 
++ }
+# weights:  5 (4 variable)
+initial  value 5.545177 
+iter  10 value 0.000137
+final  value 0.000044 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+iter  10 value 0.000605
+final  value 0.000079 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000003 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+iter  10 value 0.002999
+final  value 0.000053 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000055 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000004 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000066 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+iter  10 value 0.001054
+final  value 0.000059 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000071 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+iter  10 value 0.002402
+final  value 0.000060 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+iter  10 value 0.000216
+final  value 0.000064 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000050 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+iter  10 value 0.001904
+final  value 0.000061 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+iter  10 value 0.001679
+iter  20 value 0.000317
+iter  30 value 0.000107
+final  value 0.000098 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000014 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+iter  10 value 0.001501
+final  value 0.000061 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+iter  10 value 0.000938
+final  value 0.000055 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000000 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000058 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000083 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+iter  10 value 0.001929
+final  value 0.000060 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+iter  10 value 0.002523
+final  value 0.000061 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+iter  10 value 0.000386
+final  value 0.000062 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000053 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000083 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000084 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+iter  10 value 0.000371
+final  value 0.000059 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000070 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000056 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000037 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+iter  10 value 0.000127
+final  value 0.000041 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000032 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+iter  10 value 0.000361
+final  value 0.000057 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000000 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+iter  10 value 0.000480
+final  value 0.000069 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000050 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+iter  10 value 0.000176
+final  value 0.000055 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000053 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+iter  10 value 0.002195
+final  value 0.000069 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000100 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000059 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000000 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000065 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000005 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000021 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000071 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000056 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000065 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000001 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+iter  10 value 0.000462
+final  value 0.000067 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+iter  10 value 0.000996
+final  value 0.000055 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000002 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000086 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000004 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000002 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000058 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000072 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000051 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+iter  10 value 0.000475
+final  value 0.000068 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+iter  10 value 0.000311
+final  value 0.000052 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000000 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000058 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000088 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000082 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+iter  10 value 0.000165
+final  value 0.000052 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000062 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000082 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+iter  10 value 0.000483
+final  value 0.000070 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000014 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+iter  10 value 0.000826
+final  value 0.000052 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000068 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000058 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000002 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000048 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+iter  10 value 0.000106
+iter  10 value 0.000099
+final  value 0.000099 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+iter  10 value 0.000158
+final  value 0.000049 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000097 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+iter  10 value 0.000334
+final  value 0.000054 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000083 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+iter  10 value 0.000160
+final  value 0.000051 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000084 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000084 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+iter  10 value 0.000966
+final  value 0.000057 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000051 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+iter  10 value 0.000291
+final  value 0.000081 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000064 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000079 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+iter  10 value 0.000475
+final  value 0.000068 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000036 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000065 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+iter  10 value 0.002369
+final  value 0.000065 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000092 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+iter  10 value 0.002342
+final  value 0.000073 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000070 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+iter  10 value 0.000187
+final  value 0.000058 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000071 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+iter  10 value 0.000829
+final  value 0.000052 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000076 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+iter  10 value 0.000219
+final  value 0.000066 
+converged
+# weights:  5 (4 variable)
+initial  value 5.545177 
+final  value 0.000005 
+converged
+There were 50 or more warnings (use warnings() to see the first 50)
+> 
+> 
+> #################
+> ## Model Results
+> #################
+> 
+> #SVM
+> model_rslts[1,1]<-mean(svm_train)
+> model_rslts[1,2]<-mean(svm_valid)
+> 
+> #tree
+> model_rslts[2,1]<-mean(tree_train)
+> model_rslts[2,2]<-mean(tree_valid)
+> 
+> #LDA
+> model_rslts[3,1]<-mean(lda_train)
+> model_rslts[3,2]<-mean(lda_valid)
+> 
+> #LR
+> model_rslts[4,1]<-mean(lr_train)
+> model_rslts[4,2]<-mean(lr_valid)
+> 
+> #COL
+> model_rslts[5,1]<-mean(cols_train)
+> model_rslts[5,2]<-mean(cols_valid)
+> 
+> sd(svm_train)
+[1] 0
+> sd(svm_valid)
+[1] 0
+> sd(tree_train)
+[1] NA
+> sd(tree_valid)
+[1] 0.01088896
+> sd(lda_train)
+[1] 0
+> sd(lda_valid)
+[1] 0
+> sd(lr_valid)
+[1] 0.03230995
+> sd(lr_train)
+[1] 0
+> sd(cols_train)
+[1] 0.01758816
+> sd(cols_valid)
+[1] 7.063519e-05
+> 
+> 
+> #display results
+> model_rslts
+      Train Validation
+SVM  1.0000  1.0000000
+Tree 0.3750  0.5002811
+LDA  1.0000  1.0000000
+LR   1.0000  0.9814508
+COLS 0.9975  0.9924799
+> 
+> xtable(model_rslts, digits=2)
+% latex table generated in R 3.4.4 by xtable 1.8-2 package
+% Mon Jun 24 13:40:53 2019
+\begin{table}[ht]
+\centering
+\begin{tabular}{rrr}
+  \hline
+ & Train & Validation \\ 
+  \hline
+SVM & 1.00 & 1.00 \\ 
+  Tree & 0.38 & 0.50 \\ 
+  LDA & 1.00 & 1.00 \\ 
+  LR & 1.00 & 0.98 \\ 
+  COLS & 1.00 & 0.99 \\ 
+   \hline
+\end{tabular}
+\end{table}
+> 
+> valid_results[,2]<-model_rslts[,2]
+> train_results[,2]<-model_rslts[,1]
+> 
+> 
+> ##################################
+> ## training sample size = 5
+> ##################################
+> 
+> n=5
+> 
+> #################
+> # modeling
+> #################
+> 
+> set.seed(3878471)
+> 
+> 
+> #initialize objects to hold results
+> qda_train<-c()
+> qda_valid<-c()
+> svm_train<-c()
+> svm_valid<-c()
+> tree_train<-c()
+> tree_valid<-c()
+> lda_train<-c()
+> lda_valid<-c()
+> lr_train<-c()
+> lr_valid<-c()
+> cols_train<-c()
+> cols_valid<-c()
+> 
+> #simuiltion size
+> sim=100
+> 
+> for (i in 1:sim) {
++ 
++     train1<-sample(1:m, n)
++     train2<-sample(1:m, n)
++ 
++     mytrain<-rbind(data1[train1,], data2[train2,])
++ 
++     labs_train<-as.factor(c(rep(1, n), rep(2, n)) )
++ 
++     myvalid<-rbind(data1[-train1,], data2[-train2,])
++ 
++     labs_valid<-as.factor(c(rep(1, m-n),
++                             rep(2, m-n) ) )
++ 
++     #######
++     #SVM
++     #######
++ 
++     equa=labs ~ V1 + V2 + V3
++ 
++     train<-as.data.frame(cbind(as.factor(labs_train), mytrain))
++     colnames(train)<-c("labs", "V1", "V2", "V3")
++ 
++     valid<-as.data.frame(cbind(as.factor(labs_valid), myvalid))
++     colnames(valid)<-c("labs", "V1", "V2", "V3")
++ 
++     #creating model
++     svmfit=svm(labs ~ V1 + V2 + V3, data=as.data.frame(train),
++            kernel="linear",
++            #cost=2, #coef0= 1, degree=2,
++            scale=FALSE)
++ 
++     #plot(svmfit , train)
++     #summary(svmfit)
++ 
++     ypred=round(predict(svmfit ,as.data.frame(train)))
++     #table(predict=ypred, truth=train$labs)
++     svm_train[i]<-mean(ypred==as.factor(as.numeric(labs_train)))
++ 
++     #now on valid
++     ypred_valid=round(predict(svmfit ,as.data.frame(valid) ))
++     #table(predict=ypred_valid, truth=valid$labs)
++     svm_valid[i]<-mean(ypred_valid==as.factor(as.numeric(labs_valid)))
++ 
++ 
++     ######
++     # Tree
++     #######
++ 
++     #training tree mdoel
++     treefit =tree(labs_train~ V1+V2+V3, data=as.data.frame(train) )
++     #summary(treefit)
++ 
++     ypred_train=predict(treefit ,train, type='class')
++     #table(predict=ypred_train, truth=as.factor(train$labs))
++     tree_train<-mean(ypred_train==as.factor((train$labs)))
++ 
++     #plot(treefit )
++     #text(treefit ,pretty =0)
++ 
++     ypred_valid=predict(treefit ,valid, type='class')
++     #table(predict=ypred_valid, truth=valid$labs)
++     tree_valid[i]<-mean(ypred_valid==as.factor(as.numeric(labs_valid)))
++ 
++     #######
++     #LDA
++     #######
++ 
++     #creating model
++     lda.fit = lda(equa, data=train)
++     #qda.fit #rank deficiency - ie unable to compute
++ 
++     #predicting
++     lda.pred=predict(lda.fit, train)
++     lda.class = lda.pred$class
++ 
++     #results
++     #table(qda.class, labs_train)
++     #overall classification rate for training
++     lda_train[i]<- mean(lda.class==as.factor(as.numeric(labs_train)))
++ 
++     ####
++     #now predict on validation
++ 
++     #predicting
++     lda.pred=predict(lda.fit, valid)
++     lda.class = lda.pred$class
++ 
++     #results
++     #table(qda.class, labs_valid)
++     #overall classification rate for training
++     lda_valid[i]<-mean(lda.class==as.factor(as.numeric(labs_valid)))
++ 
++     ################################
++     #Multinomial Logistic Regression
++     ################################
++ 
++     #creating model
++     lr.fit=multinom(equa, data=train)
++ 
++     ypred=predict(lr.fit ,train)
++     #table(predict=ypred, truth=train$labs)
++     lr_train[i]<-mean(ypred==as.factor(as.numeric(labs_train)))
++ 
++     #now on valid
++     ypred_valid=predict(lr.fit ,valid)
++     #table(predict=ypred_valid, truth=valid$labs)
++     lr_valid[i]<-mean(ypred_valid==as.factor(as.numeric(labs_valid)))
++ 
++     ####################
++     #COLS
++     ####################
++     fit<-list()
++   	equa= V1 ~ V2+ V3
++     fit[[1]]<-lm(equa,
++   	         data=as.data.frame(data1[train1,]) )
++   	fit[[2]]<-lm(equa,
++   	         data=as.data.frame(data2[train2,]) )
++ 
++   	k<-length(fit)
++   	residuals<-matrix(nrow=dim(mytrain)[1], ncol=2, data=NA)
++ 
++ 		for(j in 1:k){
++ 
++ 		    residuals[,j]<-predict(fit[[j]],
++ 															 newdata=as.data.frame(mytrain) )
++ 
++   		}
++ 
++   	cols_class<-apply(FUN=which.min, X=residuals^2, MARGIN=1)
++ 
++ 		cols_train[i]<-mean(cols_class==as.factor(as.numeric(labs_train)))
++ 
++ 		#predicting classes for validation
++ 		residuals<-matrix(nrow=dim(myvalid)[1], ncol=2, data=NA)
++ 
++ 		for(j in 1:k){
++ 
++ 		    residuals[,j]<-predict(fit[[j]],
++ 															 newdata=as.data.frame(myvalid) )
++ 
++ 		}
++ 
++ 		cols_class<-apply(FUN=which.min, X=residuals^2, MARGIN=1)
++ 
++ 		cols_valid[i]<-mean(cols_class==as.factor(as.numeric(labs_valid)))
++ 
++ }
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000049 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+iter  10 value 0.002459
+final  value 0.000098 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000003 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000052 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000004 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000000 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000002 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000067 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+iter  10 value 0.000318
+final  value 0.000053 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000001 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+iter  10 value 0.000225
+final  value 0.000066 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000063 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000002 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+iter  10 value 0.000548
+final  value 0.000075 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000066 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000040 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000048 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000050 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000013 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+iter  10 value 0.001036
+final  value 0.000056 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+iter  10 value 0.001026
+final  value 0.000057 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000044 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+iter  10 value 0.000895
+final  value 0.000052 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000066 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+iter  10 value 0.007265
+iter  20 value 0.000118
+final  value 0.000094 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+iter  10 value 0.004979
+iter  20 value 0.000164
+iter  30 value 0.000111
+final  value 0.000045 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000000 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+iter  10 value 0.000153
+final  value 0.000049 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000074 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+iter  10 value 0.000152
+final  value 0.000048 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000055 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000016 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000076 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000078 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000055 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+iter  10 value 0.000674
+final  value 0.000086 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+iter  10 value 0.002175
+final  value 0.000066 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+iter  10 value 0.001740
+final  value 0.000062 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000074 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+iter  10 value 0.000226
+final  value 0.000068 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000064 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000079 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000002 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000060 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+iter  10 value 0.002367
+final  value 0.000060 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+iter  10 value 0.001101
+final  value 0.000060 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+iter  10 value 0.004256
+iter  20 value 0.000122
+iter  20 value 0.000081
+iter  20 value 0.000080
+final  value 0.000080 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+iter  10 value 0.001106
+final  value 0.000059 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000070 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000052 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+iter  10 value 0.002788
+final  value 0.000056 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+iter  10 value 0.002139
+final  value 0.000071 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000064 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+iter  10 value 0.002399
+final  value 0.000059 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+iter  10 value 0.001339
+final  value 0.000065 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000063 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000082 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000078 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+iter  10 value 0.001819
+final  value 0.000070 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+iter  10 value 0.001229
+final  value 0.000059 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000010 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000041 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000011 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000047 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+iter  10 value 0.000445
+final  value 0.000065 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000084 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000036 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000074 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000000 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000060 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+iter  10 value 0.000837
+final  value 0.000054 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000060 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000068 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000059 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000079 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+iter  10 value 0.001258
+final  value 0.000057 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000004 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+iter  10 value 0.000308
+final  value 0.000051 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000017 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000052 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000048 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+iter  10 value 0.003161
+final  value 0.000057 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+iter  10 value 0.002562
+iter  20 value 0.000252
+final  value 0.000086 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000065 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+iter  10 value 0.001832
+final  value 0.000063 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000067 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000076 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+iter  10 value 0.001958
+final  value 0.000066 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+iter  10 value 0.002261
+final  value 0.000063 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+iter  10 value 0.000889
+final  value 0.000053 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000063 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+iter  10 value 0.000169
+final  value 0.000053 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000040 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+iter  10 value 0.004094
+iter  20 value 0.000171
+iter  20 value 0.000066
+iter  20 value 0.000065
+final  value 0.000065 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+iter  10 value 0.000441
+final  value 0.000066 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000079 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000032 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+iter  10 value 0.002015
+final  value 0.000067 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+final  value 0.000076 
+converged
+# weights:  5 (4 variable)
+initial  value 6.931472 
+iter  10 value 0.000652
+final  value 0.000084 
+converged
+There were 50 or more warnings (use warnings() to see the first 50)
+> 
+> 
+> #################
+> ## Model Results
+> #################
+> 
+> #SVM
+> model_rslts[1,1]<-mean(svm_train)
+> model_rslts[1,2]<-mean(svm_valid)
+> 
+> #tree
+> model_rslts[2,1]<-mean(tree_train)
+> model_rslts[2,2]<-mean(tree_valid)
+> 
+> #LDA
+> model_rslts[3,1]<-mean(lda_train)
+> model_rslts[3,2]<-mean(lda_valid)
+> 
+> #LR
+> model_rslts[4,1]<-mean(lr_train)
+> model_rslts[4,2]<-mean(lr_valid)
+> 
+> #COL
+> model_rslts[5,1]<-mean(cols_train)
+> model_rslts[5,2]<-mean(cols_valid)
+> 
+> sd(svm_train)
+[1] 0
+> sd(svm_valid)
+[1] 0
+> sd(tree_train)
+[1] NA
+> sd(tree_valid)
+[1] 0.05374845
+> sd(lda_train)
+[1] 0
+> sd(lda_valid)
+[1] 0
+> sd(lr_valid)
+[1] 0.02732412
+> sd(lr_train)
+[1] 0
+> sd(cols_train)
+[1] 0.02726599
+> sd(cols_valid)
+[1] 0.000137015
+> 
+> 
+> #display results
+> model_rslts
+     Train Validation
+SVM  1.000  1.0000000
+Tree 1.000  0.9923668
+LDA  1.000  1.0000000
+LR   1.000  0.9835126
+COLS 0.992  0.9925025
+> 
+> xtable(model_rslts, digits=2)
+% latex table generated in R 3.4.4 by xtable 1.8-2 package
+% Mon Jun 24 13:40:59 2019
+\begin{table}[ht]
+\centering
+\begin{tabular}{rrr}
+  \hline
+ & Train & Validation \\ 
+  \hline
+SVM & 1.00 & 1.00 \\ 
+  Tree & 1.00 & 0.99 \\ 
+  LDA & 1.00 & 1.00 \\ 
+  LR & 1.00 & 0.98 \\ 
+  COLS & 0.99 & 0.99 \\ 
+   \hline
+\end{tabular}
+\end{table}
+> 
+> valid_results[,3]<-model_rslts[,2]
+> train_results[,3]<-model_rslts[,1]
+> 
+> 
+> ##################################
+> ## training sample size = 6
+> ##################################
+> 
+> n=6
+> 
+> #################
+> # modeling
+> #################
+> 
+> set.seed(5396479)
+> 
+> 
+> #initialize objects to hold results
+> qda_train<-c()
+> qda_valid<-c()
+> svm_train<-c()
+> svm_valid<-c()
+> tree_train<-c()
+> tree_valid<-c()
+> lda_train<-c()
+> lda_valid<-c()
+> lr_train<-c()
+> lr_valid<-c()
+> cols_train<-c()
+> cols_valid<-c()
+> 
+> #simuiltion size
+> sim=100
+> 
+> for (i in 1:sim) {
++ 
++     train1<-sample(1:m, n)
++     train2<-sample(1:m, n)
++ 
++     mytrain<-rbind(data1[train1,], data2[train2,])
++ 
++     labs_train<-as.factor(c(rep(1, n), rep(2, n)) )
++ 
++     myvalid<-rbind(data1[-train1,], data2[-train2,])
++ 
++     labs_valid<-as.factor(c(rep(1, m-n),
++                             rep(2, m-n) ) )
++ 
++     #######
++     #SVM
++     #######
++ 
++     equa=labs ~ V1 + V2 + V3
++ 
++     train<-as.data.frame(cbind(as.factor(labs_train), mytrain))
++     colnames(train)<-c("labs", "V1", "V2", "V3")
++ 
++     valid<-as.data.frame(cbind(as.factor(labs_valid), myvalid))
++     colnames(valid)<-c("labs", "V1", "V2", "V3")
++ 
++     #creating model
++     svmfit=svm(labs ~ V1 + V2 + V3, data=as.data.frame(train),
++            kernel="linear",
++            #cost=2, #coef0= 1, degree=2,
++            scale=FALSE)
++ 
++     #plot(svmfit , train)
++     #summary(svmfit)
++ 
++     ypred=round(predict(svmfit ,as.data.frame(train)))
++     #table(predict=ypred, truth=train$labs)
++     svm_train[i]<-mean(ypred==as.factor(as.numeric(labs_train)))
++ 
++     #now on valid
++     ypred_valid=round(predict(svmfit ,as.data.frame(valid) ))
++     #table(predict=ypred_valid, truth=valid$labs)
++     svm_valid[i]<-mean(ypred_valid==as.factor(as.numeric(labs_valid)))
++ 
++ 
++     ######
++     # Tree
++     #######
++ 
++     #training tree mdoel
++     treefit =tree(labs_train~ V1+V2+V3, data=as.data.frame(train) )
++     #summary(treefit)
++ 
++     ypred_train=predict(treefit ,train, type='class')
++     #table(predict=ypred_train, truth=as.factor(train$labs))
++     tree_train<-mean(ypred_train==as.factor((train$labs)))
++ 
++     #plot(treefit )
++     #text(treefit ,pretty =0)
++ 
++     ypred_valid=predict(treefit ,valid, type='class')
++     #table(predict=ypred_valid, truth=valid$labs)
++     tree_valid[i]<-mean(ypred_valid==as.factor(as.numeric(labs_valid)))
++ 
++     #######
++     #LDA
++     #######
++ 
++     #creating model
++     lda.fit = lda(equa, data=train)
++     #qda.fit #rank deficiency - ie unable to compute
++ 
++     #predicting
++     lda.pred=predict(lda.fit, train)
++     lda.class = lda.pred$class
++ 
++     #results
++     #table(qda.class, labs_train)
++     #overall classification rate for training
++     lda_train[i]<- mean(lda.class==as.factor(as.numeric(labs_train)))
++ 
++     ####
++     #now predict on validation
++ 
++     #predicting
++     lda.pred=predict(lda.fit, valid)
++     lda.class = lda.pred$class
++ 
++     #results
++     #table(qda.class, labs_valid)
++     #overall classification rate for training
++     lda_valid[i]<-mean(lda.class==as.factor(as.numeric(labs_valid)))
++ 
++     ################################
++     #Multinomial Logistic Regression
++     ################################
++ 
++     #creating model
++     lr.fit=multinom(equa, data=train)
++ 
++     ypred=predict(lr.fit ,train)
++     #table(predict=ypred, truth=train$labs)
++     lr_train[i]<-mean(ypred==as.factor(as.numeric(labs_train)))
++ 
++     #now on valid
++     ypred_valid=predict(lr.fit ,valid)
++     #table(predict=ypred_valid, truth=valid$labs)
++     lr_valid[i]<-mean(ypred_valid==as.factor(as.numeric(labs_valid)))
++ 
++     ####################
++     #COLS
++     ####################
++     fit<-list()
++   	equa= V1 ~ V2+ V3
++     fit[[1]]<-lm(equa,
++   	         data=as.data.frame(data1[train1,]) )
++   	fit[[2]]<-lm(equa,
++   	         data=as.data.frame(data2[train2,]) )
++ 
++   	k<-length(fit)
++   	residuals<-matrix(nrow=dim(mytrain)[1], ncol=2, data=NA)
++ 
++ 		for(j in 1:k){
++ 
++ 		    residuals[,j]<-predict(fit[[j]],
++ 															 newdata=as.data.frame(mytrain) )
++ 
++   		}
++ 
++   	cols_class<-apply(FUN=which.min, X=residuals^2, MARGIN=1)
++ 
++ 		cols_train[i]<-mean(cols_class==as.factor(as.numeric(labs_train)))
++ 
++ 		#predicting classes for validation
++ 		residuals<-matrix(nrow=dim(myvalid)[1], ncol=2, data=NA)
++ 
++ 		for(j in 1:k){
++ 
++ 		    residuals[,j]<-predict(fit[[j]],
++ 															 newdata=as.data.frame(myvalid) )
++ 
++ 		}
++ 
++ 		cols_class<-apply(FUN=which.min, X=residuals^2, MARGIN=1)
++ 
++ 		cols_valid[i]<-mean(cols_class==as.factor(as.numeric(labs_valid)))
++ 
++ }
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000062 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+iter  10 value 0.000468
+final  value 0.000071 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000050 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+iter  10 value 0.002477
+final  value 0.000069 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000074 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+iter  10 value 0.000120
+final  value 0.000039 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000000 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000076 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+iter  10 value 0.000130
+final  value 0.000042 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+iter  10 value 0.001175
+final  value 0.000062 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000004 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000079 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000001 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000002 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000051 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+iter  10 value 0.000282
+final  value 0.000079 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000049 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000000 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000036 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000050 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+iter  10 value 0.002498
+final  value 0.000068 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+iter  10 value 0.000561
+final  value 0.000076 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+iter  10 value 0.000202
+final  value 0.000061 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000051 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000002 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000047 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000002 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+iter  10 value 0.000282
+final  value 0.000079 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000080 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+iter  10 value 0.000134
+final  value 0.000043 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000001 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000059 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000001 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+iter  10 value 0.002073
+final  value 0.000066 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000080 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+iter  10 value 0.000198
+final  value 0.000059 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+iter  10 value 0.000218
+final  value 0.000064 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000000 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+iter  10 value 0.000425
+final  value 0.000065 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000042 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000053 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+iter  10 value 0.001055
+final  value 0.000057 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000050 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+iter  10 value 0.000141
+final  value 0.000046 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+iter  10 value 0.000964
+final  value 0.000055 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000064 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000079 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+iter  10 value 0.000378
+final  value 0.000060 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+iter  10 value 0.000136
+final  value 0.000044 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000000 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+iter  10 value 0.000102
+iter  10 value 0.000095
+final  value 0.000095 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000000 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+iter  10 value 0.000284
+final  value 0.000080 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000002 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+iter  10 value 0.000124
+final  value 0.000040 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000052 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000000 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+iter  10 value 0.003261
+iter  20 value 0.000425
+final  value 0.000091 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000000 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000085 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000003 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000076 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000000 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000003 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000046 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000065 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+iter  10 value 0.000213
+final  value 0.000062 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+iter  10 value 0.000675
+final  value 0.000084 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000074 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000015 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+iter  10 value 0.000325
+final  value 0.000053 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000039 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000000 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+iter  10 value 0.000111
+final  value 0.000037 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000006 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+iter  10 value 0.002938
+final  value 0.000064 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000021 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000006 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000000 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000079 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000046 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+iter  10 value 0.002663
+final  value 0.000057 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000010 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+iter  10 value 0.001408
+final  value 0.000064 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000069 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000059 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+iter  10 value 0.000274
+final  value 0.000078 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+iter  10 value 0.000389
+final  value 0.000061 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000009 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+iter  10 value 0.000928
+final  value 0.000055 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000072 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000066 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+iter  10 value 0.002118
+final  value 0.000062 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+iter  10 value 0.000282
+final  value 0.000080 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+iter  10 value 0.002589
+final  value 0.000061 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000000 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000003 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+final  value 0.000053 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+iter  10 value 0.001763
+final  value 0.000067 
+converged
+# weights:  5 (4 variable)
+initial  value 8.317766 
+iter  10 value 0.006151
+iter  20 value 0.000127
+final  value 0.000086 
+converged
+There were 50 or more warnings (use warnings() to see the first 50)
+> 
+> 
+> #################
+> ## Model Results
+> #################
+> 
+> #SVM
+> model_rslts[1,1]<-mean(svm_train)
+> model_rslts[1,2]<-mean(svm_valid)
+> 
+> #tree
+> model_rslts[2,1]<-mean(tree_train)
+> model_rslts[2,2]<-mean(tree_valid)
+> 
+> #LDA
+> model_rslts[3,1]<-mean(lda_train)
+> model_rslts[3,2]<-mean(lda_valid)
+> 
+> #LR
+> model_rslts[4,1]<-mean(lr_train)
+> model_rslts[4,2]<-mean(lr_valid)
+> 
+> #COL
+> model_rslts[5,1]<-mean(cols_train)
+> model_rslts[5,2]<-mean(cols_valid)
+> 
+> sd(svm_train)
+[1] 0
+> sd(svm_valid)
+[1] 0
+> sd(tree_train)
+[1] NA
+> sd(tree_valid)
+[1] 0
+> sd(lda_train)
+[1] 0
+> sd(lda_valid)
+[1] 0
+> sd(lr_valid)
+[1] 0.02082095
+> sd(lr_train)
+[1] 0
+> sd(cols_train)
+[1] 0.03277093
+> sd(cols_valid)
+[1] 0.0001978124
+> 
+> 
+> #display results
+> model_rslts
+         Train Validation
+SVM  1.0000000  1.0000000
+Tree 1.0000000  1.0000000
+LDA  1.0000000  1.0000000
+LR   1.0000000  0.9826258
+COLS 0.9891667  0.9925201
+> 
+> xtable(model_rslts, digits=2)
+% latex table generated in R 3.4.4 by xtable 1.8-2 package
+% Mon Jun 24 13:41:04 2019
+\begin{table}[ht]
+\centering
+\begin{tabular}{rrr}
+  \hline
+ & Train & Validation \\ 
+  \hline
+SVM & 1.00 & 1.00 \\ 
+  Tree & 1.00 & 1.00 \\ 
+  LDA & 1.00 & 1.00 \\ 
+  LR & 1.00 & 0.98 \\ 
+  COLS & 0.99 & 0.99 \\ 
+   \hline
+\end{tabular}
+\end{table}
+> 
+> valid_results[,4]<-model_rslts[,2]
+> train_results[,4]<-model_rslts[,1]
+> 
+> train_results
+           n=3    n=4   n=5       n=6
+SVM  1.0000000 1.0000 1.000 1.0000000
+Tree 0.3333333 0.3750 1.000 1.0000000
+LDA  1.0000000 1.0000 1.000 1.0000000
+LR   1.0000000 1.0000 1.000 1.0000000
+COLS 0.9883333 0.9975 0.992 0.9891667
+> 
+> valid_results
+           n=3       n=4       n=5       n=6
+SVM  1.0000000 1.0000000 1.0000000 1.0000000
+Tree 0.4994534 0.5002811 0.9923668 1.0000000
+LDA  1.0000000 1.0000000 1.0000000 1.0000000
+LR   0.9873069 0.9814508 0.9835126 0.9826258
+COLS 0.9925125 0.9924799 0.9925025 0.9925201
+> 
+> xtable(valid_results)
+% latex table generated in R 3.4.4 by xtable 1.8-2 package
+% Mon Jun 24 13:41:04 2019
+\begin{table}[ht]
+\centering
+\begin{tabular}{rrrrr}
+  \hline
+ & n=3 & n=4 & n=5 & n=6 \\ 
+  \hline
+SVM & 1.00 & 1.00 & 1.00 & 1.00 \\ 
+  Tree & 0.50 & 0.50 & 0.99 & 1.00 \\ 
+  LDA & 1.00 & 1.00 & 1.00 & 1.00 \\ 
+  LR & 0.99 & 0.98 & 0.98 & 0.98 \\ 
+  COLS & 0.99 & 0.99 & 0.99 & 0.99 \\ 
+   \hline
+\end{tabular}
+\end{table}
+> 
+> xtable(train_results)
+% latex table generated in R 3.4.4 by xtable 1.8-2 package
+% Mon Jun 24 13:41:04 2019
+\begin{table}[ht]
+\centering
+\begin{tabular}{rrrrr}
+  \hline
+ & n=3 & n=4 & n=5 & n=6 \\ 
+  \hline
+SVM & 1.00 & 1.00 & 1.00 & 1.00 \\ 
+  Tree & 0.33 & 0.38 & 1.00 & 1.00 \\ 
+  LDA & 1.00 & 1.00 & 1.00 & 1.00 \\ 
+  LR & 1.00 & 1.00 & 1.00 & 1.00 \\ 
+  COLS & 0.99 & 1.00 & 0.99 & 0.99 \\ 
+   \hline
+\end{tabular}
+\end{table}
+> 
+> ultima<-as.data.frame(rbind(train_results, valid_results))
+> 
+> fcts<-as.factor(c(rep(1, 5), rep(2, 5)))
+> 
+> ultima<-cbind(ultima, fcts)
+Warning message:
+In data.row.names(row.names, rowsi, i) :
+  some row.names duplicated: 6,7,8,9,10 --> row.names NOT used
+> 
+> ultima
+         n=3       n=4       n=5       n=6 fcts
+1  1.0000000 1.0000000 1.0000000 1.0000000    1
+2  0.3333333 0.3750000 1.0000000 1.0000000    1
+3  1.0000000 1.0000000 1.0000000 1.0000000    1
+4  1.0000000 1.0000000 1.0000000 1.0000000    1
+5  0.9883333 0.9975000 0.9920000 0.9891667    1
+6  1.0000000 1.0000000 1.0000000 1.0000000    2
+7  0.4994534 0.5002811 0.9923668 1.0000000    2
+8  1.0000000 1.0000000 1.0000000 1.0000000    2
+9  0.9873069 0.9814508 0.9835126 0.9826258    2
+10 0.9925125 0.9924799 0.9925025 0.9925201    2
+> 
+> xtable(ultima)
+% latex table generated in R 3.4.4 by xtable 1.8-2 package
+% Mon Jun 24 13:41:04 2019
+\begin{table}[ht]
+\centering
+\begin{tabular}{rrrrrl}
+  \hline
+ & n=3 & n=4 & n=5 & n=6 & fcts \\ 
+  \hline
+1 & 1.00 & 1.00 & 1.00 & 1.00 & 1 \\ 
+  2 & 0.33 & 0.38 & 1.00 & 1.00 & 1 \\ 
+  3 & 1.00 & 1.00 & 1.00 & 1.00 & 1 \\ 
+  4 & 1.00 & 1.00 & 1.00 & 1.00 & 1 \\ 
+  5 & 0.99 & 1.00 & 0.99 & 0.99 & 1 \\ 
+  6 & 1.00 & 1.00 & 1.00 & 1.00 & 2 \\ 
+  7 & 0.50 & 0.50 & 0.99 & 1.00 & 2 \\ 
+  8 & 1.00 & 1.00 & 1.00 & 1.00 & 2 \\ 
+  9 & 0.99 & 0.98 & 0.98 & 0.98 & 2 \\ 
+  10 & 0.99 & 0.99 & 0.99 & 0.99 & 2 \\ 
+   \hline
+\end{tabular}
+\end{table}
+> 
+> 
+> #final results plot
+> 
+> models<-( rep(c("SVM", "Tree", "LDA", "LR", "COLS"), 10 ) )
+> set<-( rep(c(rep("Training", 5), rep("Validation", 5)), 4) )
+> acc<-c(ultima[,1], ultima[,2], ultima[,3], ultima[,4])
+> samp<-c( rep(3.0, 10), rep(4.0, 10), rep(5.0, 10), rep(6.0, 10))
+> mydata<-as.data.frame(cbind(models, (acc), set, as.numeric(samp) ) )
+Warning message:
+In cbind(models, (acc), set, as.numeric(samp)) :
+  number of rows of result is not a multiple of vector length (arg 2)
+> 
+> colnames(mydata)[2]<-"Acc"
+> colnames(mydata)[4]<-"Samp"
+> 
+> colors <- c("SVM" = "Green", "Tree" = "khaki2",
++             "LDA" = "Cyan", "LR" = "Purple", "COLS" = "Navy")
+> 
+> ultima_plot<-ggplot(data=mydata,
++             aes(x = as.numeric(as.character(mydata$Samp)),
++                 y = as.numeric(as.character(mydata$Acc)),
++                 colour = as.factor(mydata$models),
++                 shape= as.factor(mydata$set),
++                 linetype= as.factor(mydata$set),
++                 group=interaction(as.factor(mydata$models), as.factor(mydata$set))
++                 ) )+
++           geom_point(size=4, alpha=0.5)+
++           geom_line(size=2, alpha=0.5 )+
++           #geom_ribbon(aes(ymin=temp$lower, ymax=temp$upper), linetype=2, alpha=0.1)+
++ 	 	  ggtitle("Overall Results for\nSimulated\nMultivariate Normal")+
++ 		  xlab("Training Size")+
++ 		  ylab("Overall Accuracy")+
++ 		  labs(colour= "Model", shape="Data Set", linetype="Data Set")+
++ 	      #scale_y_discrete(limits=c(0, 1.00))+
++           #scale_x_discrete(breaks=c(3, 4, 5, 7, 10, 20))+
++           mytheme.scat+
++           scale_colour_manual(values = colors,
++                               breaks=c("SVM", "Tree","LDA", "LR", "COLS"))+
++           #scale_color_discrete(breaks=c("Training", "Validation"))+
++           theme(legend.text=element_text(size=18),
++                 legend.title=element_text(size=24))
+> 
+> ultima_plot
+> 
+> ggsave(filename="plots/OverallAcc_norm.png", plot=ultima_plot,
++        width=9, height=7)
+> 
+> 
+> #
+> 
+> proc.time()
+   user  system elapsed 
+ 27.740   0.266  28.150 
