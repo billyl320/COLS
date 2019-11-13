@@ -1023,10 +1023,10 @@ ultima_plot<-ggplot(data=mydata,
                 linetype= as.factor(mydata$set),
                 group=interaction(as.factor(mydata$models), as.factor(mydata$set))
                 ) )+
-          geom_point(size=4, alpha=0.4)+
-          geom_line(size=2, alpha=0.4 )+
+          geom_point(size=4)+
+          geom_line(size=2 )+
           #geom_ribbon(aes(ymin=temp$lower, ymax=temp$upper), linetype=2, alpha=0.1)+
-	 	  ggtitle("Overall Results for\nNML NIH Pills")+
+	 	  ggtitle("Overall Results for\nNIH NLM Pills")+
 		  xlab("Training Size")+
 		  ylab("Overall Accuracy")+
 		  labs(colour= "Model", shape="Data Set", linetype="Data Set")+
@@ -1041,7 +1041,7 @@ ultima_plot<-ggplot(data=mydata,
 
 ultima_plot
 
-ggsave(filename="plots/OverallAcc_nml_circ_cap.png", plot=ultima_plot,
+ggsave(filename="plots/OverallAcc_nlm_circ_cap.png", plot=ultima_plot,
        width=9, height=7)
 
 
